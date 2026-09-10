@@ -1,6 +1,11 @@
 ---
 name: dispatching-parallel-agents
-description: Use when two or more agents can work concurrently, including tasks that touch the same file or logical area and need coordinated patch integration
+description: "Parallel agents on the same files, with patch integration."
+license: MIT
+metadata:
+  hermes:
+    tags: [superpowers, dispatching-parallel-agents, patch-integration, conflict-resolution]
+    related_skills: [prose-protocol-verification]
 ---
 
 # 并行代理调度
