@@ -42,7 +42,7 @@ description: Use when two or more agents can work concurrently, including tasks 
 ## 常见错误
 
 - 没有 patch、基线或验证结果却声称完成：读取变更集契约并标记 `blocked`。
-- 把文本可合并或最小测试通过当成 `validated`：读取重叠合并协议，按判定优先级先做语义审查。
+- 把文本可合并或最小验证通过当成 `validated`：读取重叠合并协议，按判定优先级先做语义审查。
 - 让冲突后的 Agent 互相覆盖：保留双方变更，交给隔离的整合流程。
 - 为了并行拆开共享契约：先由主 Agent 决策契约，再并行实现。
 - 把子 Agent 的"合并建议"当成协调器状态：建议只是输入，状态由协议判定。
