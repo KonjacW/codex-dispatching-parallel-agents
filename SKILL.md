@@ -14,6 +14,8 @@ description: Use when two or more agents can work concurrently, including tasks 
 - **审查**：只读检查实现或变更集，返回可复现 finding；不顺手修改实现。
 - **整合**：应用 patch、处理冲突、运行验证并报告集成状态；由主 Agent 或明确指定的整合 Agent 负责。
 
+默认只由主 Agent 向下分派一层。只有整合任务本身独立、可验收且不继续争用同一变更集时，才允许有限递归；当剩余工作主要是整合、互相等待或冲突仲裁时，停止继续拆分。任务很小且调度、等待和整合成本明显高于工作量时，主 Agent 直接处理。
+
 ## 重叠判断
 
 | 重叠关系 | 调度方式 |
@@ -56,21 +58,24 @@ description: Use when two or more agents can work concurrently, including tasks 
 
 1. 在派发前记录共同基线和每个任务的声明范围；不要用当前工作区的未记录状态充当基线。
 2. 收集变更集后，先检查基线、路径边界、patch 可重放性和验证证据；缺一项即标记 `blocked`。
-3. 对同一文件按共同基线做三方合并或顺序应用 patch；绝不把“最后写入者”当作合并策略。
+3. 创建临时集成副本，在副本中按共同基线做三方合并或顺序应用 patch；绝不把“最后写入者”当作合并策略，也不要直接在最终工作区逐个试 patch。
 4. 记录每个变更集的状态：
    - `ready`：契约完整，等待应用；
-   - `merged`：文本合并成功；
+   - `integrated`：所有 patch 已在临时集成副本中应用成功，尚未完成验证；
+   - `validated`：临时集成副本通过最小相关验证，可交给主 Agent；
+   - `validation-failed`：patch 已应用但验证失败，不能交付；
    - `needs-review`：文本可合并，但接口、不变量、测试或迁移存在语义风险；
    - `conflicted`：上下文或文本冲突，自动集成停止；
    - `blocked`：缺少基线、patch、验证、权限或范围信息。
-5. `conflicted` 时保留所有原始变更集和冲突报告，重新派发一个整合任务；不要让原 Agent 继续互相覆盖，也不要静默丢弃任一方案。
-6. `merged` 不是完成：在合并结果上运行最小相关测试、lint、类型检查或 `git diff --check`，再交给主 Agent 做最终验证。
+5. 在临时副本中运行最小相关测试、lint、类型检查或 `git diff --check`；通过才从 `integrated` 转为 `validated`。
+6. `conflicted` 或 `validation-failed` 时丢弃临时集成副本，保留所有原始变更集、日志和报告；重新派发整合任务或修复任务，不把半集成结果留在最终工作区。
+7. 只有 `validated` 的结果才交给主 Agent 写入最终工作区；主 Agent 仍需检查实际 diff、接口兼容性和未解决风险。
 
 ## 轻量化边界
 
 本 skill 只规定变更集、基线和合并状态，不要求常驻服务、数据库、实时文件锁、事件总线或语言专用 AST 解析器。优先使用 Git patch、临时副本和现有测试工具；只有重复失败或语义风险足够高时才引入更重的合并器。
 
-允许 Agent 在可回滚的临时副本中同时生成同文件候选结果；不允许多个 Agent 无基线地直接写入同一个最终工作区。文件锁只能防止覆盖，不能替代 patch、审查和测试。
+允许 Agent 在可回滚的临时副本中同时生成同文件候选结果；所有合并和验证也先在临时集成副本完成。文件锁只能防止覆盖，不能替代 patch、审查和测试。
 
 ## 主 Agent 的最终责任
 
@@ -79,7 +84,8 @@ description: Use when two or more agents can work concurrently, including tasks 
 ## 常见错误
 
 - 只说“我改好了”却没有 patch、基线或测试结果：标记 `blocked`，要求补齐变更集。
-- 两个 patch 文本可合并就直接接受：检查是否改变同一接口、不变量、配置键或迁移顺序，必要时标记 `needs-review`。
+- 两个 patch 文本可合并就直接接受：先标记 `integrated`，检查是否改变同一接口、不变量、配置键或迁移顺序；有语义风险标记 `needs-review`，验证通过才标记 `validated`。
 - 冲突后让其中一个 Agent 强行覆盖：保留双方变更，派发整合任务。
 - 为了并行而拆开共享契约：先由主 Agent 决策契约，再并行实现。
+- 在最终工作区逐个试 patch：改用临时集成副本，失败时丢弃副本。
 - 用共享实时写入取代变更集：降级到临时副本 + patch，除非主 Agent 明确承担额外风险。
